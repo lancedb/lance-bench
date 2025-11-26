@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       git_sha:
-        description: 'Git SHA to benchmark'
+        description: "Git SHA to benchmark"
         required: true
         type: string
 
@@ -65,6 +65,8 @@ jobs:
       - name: Publish results
         env:
           LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
         run: |
           uv run python scripts/publish_criterion.py \
             lance/rust/lance-io/criterion-output.json \
