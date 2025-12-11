@@ -1,0 +1,87 @@
+name: Run Rust Benchmarks
+
+on:
+  workflow_call:
+    inputs:
+      git_sha:
+        description: "Git SHA to benchmark"
+        required: true
+        type: string
+      crate_path:
+        description: "Path to the Rust crate directory (e.g., rust/lance-io)"
+        required: true
+        type: string
+    secrets:
+      LANCE_BENCH_DB_URI:
+        required: true
+      BENCH_S3_USER_ACCESS_KEY:
+        required: true
+      BENCH_S3_USER_SECRET_KEY:
+        required: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout lance-bench repository
+        uses: actions/checkout@v4
+
+      - name: Checkout lance repository
+        uses: actions/checkout@v4
+        with:
+          repository: lance-format/lance
+          ref: ${{ inputs.git_sha }}
+          path: lance
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Criterion
+        run: cargo install cargo-criterion
+
+      - name: Extract version from Cargo.toml
+        id: extract_version
+        run: |
+          cd lance
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Get commit timestamp
+        id: commit_info
+        run: |
+          cd lance
+          TIMESTAMP=$(git show -s --format=%ct ${{ inputs.git_sha }})
+          SHORT_SHA=$(git rev-parse --short ${{ inputs.git_sha }})
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Run benchmarks
+        run: |
+          cd lance/${{ inputs.crate_path }}
+          cargo criterion --benches --message-format=json > criterion-output.json
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Publish results
+        env:
+          LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+        run: |
+          uv run python scripts/publish_criterion.py \
+            lance/${{ inputs.crate_path }}/criterion-output.json \
+            --testbed-name "ubuntu-latest" \
+            --dut-name "lance" \
+            --dut-version "${{ steps.extract_version.outputs.version }}+${{ steps.commit_info.outputs.short_sha }}" \
+            --dut-timestamp ${{ steps.commit_info.outputs.timestamp }}
