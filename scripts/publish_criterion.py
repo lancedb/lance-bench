@@ -110,15 +110,14 @@ def parse_criterion_output(
             throughput = None
             if "throughput" in message:
                 tp_data = message["throughput"]
-                if len(tp_data) == 0:
-                    continue
-                if len(tp_data) > 1:
-                    raise ValueError(f"Multiple throughput values found: {tp_data}")
-                throughput = Throughput(
-                    multiplier=float(tp_data[0].get("per_iteration", 0.0)),
-                    name=tp_data[0].get("unit", "bytes"),
-                    unit_system=UnitSystem.BINARY,  # Criterion typically uses binary
-                )
+                if len(tp_data) != 0:
+                    if len(tp_data) > 1:
+                        raise ValueError(f"Multiple throughput values found: {tp_data}")
+                    throughput = Throughput(
+                        multiplier=float(tp_data[0].get("per_iteration", 0.0)),
+                        name=tp_data[0].get("unit", "bytes"),
+                        unit_system=UnitSystem.BINARY,  # Criterion typically uses binary
+                    )
 
             result = Result(
                 id=str(uuid.uuid4()),
