@@ -38,3 +38,6 @@ htmlcov/
 
 # Lance data
 .lance-bench/
+
+# Generated reports
+*.html

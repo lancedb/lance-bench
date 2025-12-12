@@ -11,8 +11,9 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy import stats
 
 # Add packages to path for imports
@@ -116,82 +117,158 @@ def analyze_benchmarks(grouped_results: dict[str, list[dict]], recent_count: int
         else:
             print(f"Skipping {benchmark_name}: insufficient data ({len(results)} results)")
 
-    # Sort by p-value descending (highest p-value = least likely regression)
-    analyzed.sort(key=lambda x: x[1], reverse=True)
+    # Sort by p-value ascending (lowest p-value = most likely regression)
+    analyzed.sort(key=lambda x: x[1], reverse=False)
 
     print(f"\nAnalyzed {len(analyzed)} benchmarks with sufficient data")
     return analyzed
 
 
+def determine_time_unit(values: list[float]) -> tuple[str, float, str]:
+    """Determine the best time unit for displaying values.
+
+    Args:
+        values: List of values in nanoseconds
+
+    Returns:
+        Tuple of (unit_name, divisor, unit_label)
+    """
+    max_val = max(values) if values else 0
+
+    if max_val < 1_000:  # Less than 1 microsecond
+        return ("nanoseconds", 1, "ns")
+    elif max_val < 1_000_000:  # Less than 1 millisecond
+        return ("microseconds", 1_000, "µs")
+    elif max_val < 1_000_000_000:  # Less than 1 second
+        return ("milliseconds", 1_000_000, "ms")
+    else:
+        return ("seconds", 1_000_000_000, "s")
+
+
 def create_regression_chart(analyzed_benchmarks: list[tuple[str, float, list[dict]]], output_path: Path) -> None:
-    """Create a multi-plot chart showing benchmark trends.
+    """Create an interactive HTML chart showing benchmark trends with tooltips.
 
     Args:
         analyzed_benchmarks: List of (benchmark_name, p_value, results) tuples
-        output_path: Path to save the chart
+        output_path: Path to save the HTML chart
     """
     n_benchmarks = len(analyzed_benchmarks)
     if n_benchmarks == 0:
         print("No benchmarks to plot")
         return
 
-    # Create figure with subplots (one per benchmark)
-    fig, axes = plt.subplots(
-        nrows=n_benchmarks,
-        ncols=1,
-        figsize=(12, max(n_benchmarks * 2, 10)),
-        sharex=False,
+    print(f"\nCreating interactive chart with {n_benchmarks} subplots...")
+
+    # Create subplots with minimal spacing
+    # Maximum vertical spacing is 1 / (rows - 1), but we want much less
+    max_allowed_spacing = 1.0 / (n_benchmarks - 1) if n_benchmarks > 1 else 0.1
+    # Use minimal spacing - just enough to see separation
+    vertical_spacing = min(0.005, max_allowed_spacing * 0.3)
+
+    fig = make_subplots(
+        rows=n_benchmarks,
+        cols=1,
+        subplot_titles=[f"{name} (p={pval:.4f})" for name, pval, _ in analyzed_benchmarks],
+        vertical_spacing=vertical_spacing,
     )
 
-    # Handle single benchmark case (axes is not an array)
-    if n_benchmarks == 1:
-        axes = [axes]
-
-    print(f"\nCreating chart with {n_benchmarks} subplots...")
-
     for idx, (benchmark_name, pvalue, results) in enumerate(analyzed_benchmarks):
-        ax = axes[idx]
+        row = idx + 1
 
         # Extract data for plotting
         timestamps = [r["dut"]["timestamp"] for r in results]
         means = [r["summary"]["mean"] for r in results]
 
+        # Determine best unit for this benchmark
+        unit_name, divisor, unit_label = determine_time_unit(means)
+
+        # Convert values to appropriate unit
+        means_scaled = [m / divisor for m in means]
+
         # Convert timestamps to datetime for better x-axis labels
         dates = [datetime.fromtimestamp(ts) for ts in timestamps]
 
-        # Plot the data
-        ax.plot(dates, means, marker="o", linestyle="-", linewidth=1, markersize=4)
+        # Format hover text with detailed information
+        hover_texts = []
+        for r in results:
+            ts = datetime.fromtimestamp(r["dut"]["timestamp"])
+            hover_text = (
+                f"<b>{benchmark_name}</b><br>"
+                f"Version: {r['dut']['version']}<br>"
+                f"Timestamp: {ts.strftime('%Y-%m-%d %H:%M:%S')}<br>"
+                f"Mean: {r['summary']['mean'] / divisor:.2f} {unit_label}<br>"
+                f"Min: {r['summary']['min'] / divisor:.2f} {unit_label}<br>"
+                f"Max: {r['summary']['max'] / divisor:.2f} {unit_label}<br>"
+                f"Std Dev: {r['summary']['standard_deviation'] / divisor:.2f} {unit_label}"
+            )
+            hover_texts.append(hover_text)
+
+        # Add trace for the benchmark data
+        fig.add_trace(
+            go.Scatter(
+                x=dates,
+                y=means_scaled,
+                mode="lines+markers",
+                name=benchmark_name,
+                hovertext=hover_texts,
+                hoverinfo="text",
+                marker={"size": 6},
+                line={"width": 2},
+                showlegend=False,
+            ),
+            row=row,
+            col=1,
+        )
 
         # Add vertical line separating recent results
         if len(results) >= 4:
             split_date = dates[-4]
-            ax.axvline(x=split_date, color="red", linestyle="--", alpha=0.5, linewidth=1)
+            # Add as a shape - need to specify both xref and yref for correct subplot
+            # xref format: "x" for first plot, "x2" for second, etc.
+            # yref format: "y domain" for first plot, "y2 domain" for second, etc.
+            xref = "x" if idx == 0 else f"x{idx + 1}"
+            yref = "y domain" if idx == 0 else f"y{idx + 1} domain"
+            fig.add_shape(
+                type="line",
+                x0=split_date,
+                x1=split_date,
+                y0=0,
+                y1=1,
+                xref=xref,
+                yref=yref,
+                line={"color": "red", "width": 1, "dash": "dash"},
+                opacity=0.5,
+            )
 
-        # Set title with p-value
-        color = "green" if pvalue > 0.05 else "orange" if pvalue > 0.01 else "red"
-        ax.set_title(f"{benchmark_name} (p={pvalue:.4f})", fontsize=10, color=color)
+        # Color code subplot title based on p-value
+        # Use brighter colors for dark mode
+        color = "#4ade80" if pvalue > 0.05 else "#fb923c" if pvalue > 0.01 else "#f87171"
+        if fig.layout.annotations:  # type: ignore[attr-defined]
+            fig.layout.annotations[idx].update(font={"color": color, "size": 10})  # type: ignore[attr-defined,index]
 
-        # Labels
-        ax.set_ylabel("Time (ns)", fontsize=8)
-        ax.tick_params(axis="both", labelsize=8)
-        ax.grid(True, alpha=0.3)
+        # Update y-axis label with appropriate unit
+        fig.update_yaxes(title_text=f"Time ({unit_label})", row=row, col=1, title_font={"size": 10})
 
-        # Format x-axis dates
-        ax.tick_params(axis="x", rotation=45)
+    # Update x-axis for bottom plot
+    fig.update_xaxes(title_text="Date", row=n_benchmarks, col=1, title_font={"size": 10})
 
-    # Set x-label on bottom plot
-    axes[-1].set_xlabel("Date", fontsize=8)
+    # Update layout with dark mode theme
+    fig.update_layout(
+        title={
+            "text": "Benchmark Regression Analysis<br><sub>(Sorted by p-value: Low→High)</sub>",
+            "font": {"size": 16},
+        },
+        height=max(n_benchmarks * 300, 600),
+        hovermode="closest",
+        template="plotly_dark",
+        paper_bgcolor="#0f172a",  # Slate-900
+        plot_bgcolor="#1e293b",  # Slate-800
+    )
 
-    # Overall title
-    fig.suptitle("Benchmark Regression Analysis\n(Sorted by p-value: High→Low)", fontsize=14, fontweight="bold")
-
-    # Adjust layout to prevent overlap
-    plt.tight_layout(rect=(0, 0, 1, 0.98))
-
-    # Save figure
-    print(f"Saving chart to {output_path}...")
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    print("✓ Chart saved successfully")
+    # Save as HTML
+    print(f"Saving interactive chart to {output_path}...")
+    fig.write_html(output_path)
+    print("✓ Interactive HTML chart saved successfully")
 
 
 def print_summary(analyzed_benchmarks: list[tuple[str, float, list[dict]]], threshold: float = 0.05) -> None:
@@ -244,7 +321,7 @@ Examples:
   python regression_report.py
 
   # Specify output location and recent count
-  python regression_report.py -o report.png --recent-count 5
+  python regression_report.py -o report.html --recent-count 5
 
   # Use custom p-value threshold
   python regression_report.py --threshold 0.01
@@ -255,8 +332,8 @@ Examples:
         "-o",
         "--output",
         type=Path,
-        default=Path("regression_report.png"),
-        help="Output path for the chart (default: regression_report.png)",
+        default=Path("regression_report.html"),
+        help="Output path for the interactive chart (default: regression_report.html)",
     )
     parser.add_argument(
         "--recent-count",
