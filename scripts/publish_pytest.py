@@ -62,13 +62,12 @@ def get_dut_from_commit_info(
     # Validate that we have both version and timestamp
     if not version:
         raise ValueError(
-            "DUT version could not be determined. " "Provide --dut-version argument or ensure commit_info contains 'id' field."
+            "DUT version could not be determined. Provide --dut-version argument or ensure commit_info contains 'id' field."
         )
 
     if timestamp == 0:
         raise ValueError(
-            "DUT timestamp could not be determined. "
-            "Provide --dut-timestamp argument or ensure commit_info contains 'time' field."
+            "DUT timestamp could not be determined. Provide --dut-timestamp argument or ensure commit_info contains 'time' field."
         )
 
     return DutBuild(name=dut_name, version=version, timestamp=timestamp)
