@@ -23,7 +23,7 @@ on:
 
 jobs:
   benchmark:
-    runs-on: ubuntu-2404-8x-x64
+    runs-on: warp-ubuntu-latest-x64-8x
     steps:
       - name: Checkout lance-bench repository
         uses: actions/checkout@v4
