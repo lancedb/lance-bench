@@ -1,0 +1,80 @@
+name: Build Lance Python Package
+
+on:
+  workflow_call:
+    inputs:
+      git_sha:
+        description: "Git SHA to build"
+        required: true
+        type: string
+    outputs:
+      version:
+        description: "Lance version from Cargo.toml"
+        value: ${{ jobs.build.outputs.version }}
+      short_sha:
+        description: "Short git SHA"
+        value: ${{ jobs.build.outputs.short_sha }}
+      timestamp:
+        description: "Commit timestamp"
+        value: ${{ jobs.build.outputs.timestamp }}
+      dut_version:
+        description: "Full DUT version string (version+short_sha)"
+        value: ${{ jobs.build.outputs.dut_version }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+      short_sha: ${{ steps.commit_info.outputs.short_sha }}
+      timestamp: ${{ steps.commit_info.outputs.timestamp }}
+      dut_version: ${{ steps.extract_version.outputs.version }}+${{ steps.commit_info.outputs.short_sha }}
+    steps:
+      - name: Checkout lance repository
+        uses: actions/checkout@v4
+        with:
+          repository: lance-format/lance
+          ref: ${{ inputs.git_sha }}
+          path: lance
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Extract version from Cargo.toml
+        id: extract_version
+        run: |
+          cd lance
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Get commit timestamp
+        id: commit_info
+        run: |
+          cd lance
+          TIMESTAMP=$(git show -s --format=%ct ${{ inputs.git_sha }})
+          SHORT_SHA=$(git rev-parse --short ${{ inputs.git_sha }})
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build Lance Python wheel
+        run: |
+          cd lance/python
+          maturin build --release
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lance-wheel
+          path: lance/python/target/wheels/*.whl
+          retention-days: 1

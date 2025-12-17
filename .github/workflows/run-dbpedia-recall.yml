@@ -1,4 +1,4 @@
-name: Run Python Benchmarks
+name: Run DBpedia Recall Benchmarks
 
 on:
   workflow_call:
@@ -13,6 +13,8 @@ on:
       BENCH_S3_USER_ACCESS_KEY:
         required: true
       BENCH_S3_USER_SECRET_KEY:
+        required: true
+      GCP_SERVICE_ACCOUNT_KEY:
         required: true
   workflow_dispatch:
     inputs:
@@ -29,7 +31,7 @@ jobs:
 
   benchmark:
     needs: build
-    runs-on: warp-ubuntu-latest-x64-8x
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout lance-bench repository
         uses: actions/checkout@v4
@@ -40,6 +42,18 @@ jobs:
           repository: lance-format/lance
           ref: ${{ inputs.git_sha }}
           path: lance
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Download DBpedia dataset from GCS
+        run: |
+          gsutil cp gs://lance-benchmarks-ci-datasets/dbpedia.lance ./dbpedia.lance
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,21 +70,13 @@ jobs:
         run: |
           python -m venv venv
           source venv/bin/activate
-          pip install wheels/*.whl pytest pytest-benchmark requests duckdb
+          pip install wheels/*.whl numpy
 
-      - name: Generate benchmark datasets
+      - name: Run DBpedia benchmarks
         run: |
           source venv/bin/activate
-          cd lance/python
-          python python/ci_benchmarks/datagen/gen_all.py
-
-      - name: Run Python benchmarks
-        run: |
-          source venv/bin/activate
-          cd lance/python
-          pytest python/ci_benchmarks/benchmarks \
-            --benchmark-json=../../pytest-output.json \
-            --benchmark-only
+          cd lance
+          python benchmarks/dbpedia-openai/benchmarks.py --uri ../dbpedia.lance > ../dbpedia-output.txt
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -86,8 +92,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
         run: |
-          uv run python scripts/publish_pytest.py \
-            pytest-output.json \
+          uv run python scripts/publish_dbpedia.py \
+            dbpedia-output.txt \
             --testbed-name "ubuntu-latest" \
             --dut-name "lance" \
             --dut-version "${{ needs.build.outputs.dut_version }}" \
