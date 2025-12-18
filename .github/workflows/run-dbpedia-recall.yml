@@ -31,7 +31,7 @@ jobs:
 
   benchmark:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-8x
     steps:
       - name: Checkout lance-bench repository
         uses: actions/checkout@v4

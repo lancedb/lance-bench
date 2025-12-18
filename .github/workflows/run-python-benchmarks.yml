@@ -65,12 +65,14 @@ jobs:
       - name: Generate benchmark datasets
         run: |
           source venv/bin/activate
+          export PYTHONPATH="${PYTHONPATH}:${PWD}/lance/python/python"
           cd lance/python/python
           python -m ci_benchmarks.datagen.gen_all
 
       - name: Run Python benchmarks
         run: |
           source venv/bin/activate
+          export PYTHONPATH="${PYTHONPATH}:${PWD}/lance/python/python"
           cd lance/python/python
           pytest ci_benchmarks/benchmarks \
             --benchmark-json=../../../pytest-output.json \
