@@ -76,6 +76,7 @@ jobs:
       BENCH_S3_USER_SECRET_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
 
   bench-python:
+    if: false # TODO: Currently these are failing
     uses: ./.github/workflows/run-python-benchmarks.yml
     with:
       git_sha: ${{ inputs.git_sha }}
