@@ -23,7 +23,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-8x
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
       short_sha: ${{ steps.commit_info.outputs.short_sha }}
