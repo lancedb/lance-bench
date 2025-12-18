@@ -65,15 +65,15 @@ jobs:
       - name: Generate benchmark datasets
         run: |
           source venv/bin/activate
-          cd lance/python
-          python python/ci_benchmarks/datagen/gen_all.py
+          cd lance/python/python
+          python -m ci_benchmarks.datagen.gen_all
 
       - name: Run Python benchmarks
         run: |
           source venv/bin/activate
-          cd lance/python
-          pytest python/ci_benchmarks/benchmarks \
-            --benchmark-json=../../pytest-output.json \
+          cd lance/python/python
+          pytest ci_benchmarks/benchmarks \
+            --benchmark-json=../../../pytest-output.json \
             --benchmark-only
 
       - name: Install uv
