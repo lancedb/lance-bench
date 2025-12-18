@@ -53,7 +53,7 @@ jobs:
 
       - name: Download DBpedia dataset from GCS
         run: |
-          gsutil cp -r gs://lance-benchmarks-ci-datasets/dbpedia.lance ./dbpedia.lance
+          gsutil cp -r gs://lance-benchmarks-ci-datasets/dbpedia.lance .
 
       - name: Set up Python
         uses: actions/setup-python@v5
