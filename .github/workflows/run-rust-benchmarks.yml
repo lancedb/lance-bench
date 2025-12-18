@@ -62,6 +62,12 @@ jobs:
           echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
 
+      - name: Sanitize crate path for artifact name
+        id: sanitize
+        run: |
+          SANITIZED=$(echo "${{ inputs.crate_path }}" | tr '/' '-')
+          echo "crate_name=${SANITIZED}" >> $GITHUB_OUTPUT
+
       - name: Run benchmarks
         run: |
           cd lance/${{ inputs.crate_path }}
@@ -97,5 +103,5 @@ jobs:
         if: inputs.pr_number
         uses: actions/upload-artifact@v4
         with:
-          name: pr-results-rust-${{ inputs.crate_path }}
+          name: pr-results-rust-${{ steps.sanitize.outputs.crate_name }}
           path: ./pr-results.lance
