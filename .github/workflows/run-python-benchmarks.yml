@@ -26,13 +26,7 @@ on:
         type: string
 
 jobs:
-  build:
-    uses: ./.github/workflows/build-lance-python.yml
-    with:
-      git_sha: ${{ inputs.git_sha }}
-
   benchmark:
-    needs: build
     runs-on: warp-ubuntu-latest-x64-8x
     steps:
       - name: Checkout lance-bench repository
@@ -45,37 +39,58 @@ jobs:
           ref: ${{ inputs.git_sha }}
           path: lance
 
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Download Lance wheel
-        uses: actions/download-artifact@v4
-        with:
-          name: lance-wheel
-          path: wheels/
+      - name: Extract version from Cargo.toml
+        id: extract_version
+        run: |
+          cd lance
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Get commit timestamp
+        id: commit_info
+        run: |
+          cd lance
+          TIMESTAMP=$(git show -s --format=%ct ${{ inputs.git_sha }})
+          SHORT_SHA=$(git rev-parse --short ${{ inputs.git_sha }})
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
 
       - name: Create virtual environment and install dependencies
         run: |
+          cd lance/python
           python -m venv venv
           source venv/bin/activate
-          pip install wheels/*.whl pytest pytest-benchmark requests duckdb
+          pip install maturin pytest pytest-benchmark requests duckdb
+
+      - name: Build Lance Python package
+        run: |
+          cd lance/python
+          source venv/bin/activate
+          maturin develop --release
 
       - name: Generate benchmark datasets
         run: |
+          cd lance/python
           source venv/bin/activate
-          export PYTHONPATH="${PYTHONPATH}:${PWD}/lance/python/python"
-          cd lance/python/python
-          python -m ci_benchmarks.datagen.gen_all
+          python python/ci_benchmarks/datagen/gen_all.py
 
       - name: Run Python benchmarks
         run: |
+          cd lance/python
           source venv/bin/activate
-          export PYTHONPATH="${PYTHONPATH}:${PWD}/lance/python/python"
-          cd lance/python/python
-          pytest ci_benchmarks/benchmarks \
-            --benchmark-json=../../../pytest-output.json \
+          pytest python/ci_benchmarks/benchmarks \
+            --benchmark-json=../../pytest-output.json \
             --benchmark-only
 
       - name: Install uv
@@ -96,8 +111,8 @@ jobs:
             pytest-output.json \
             --testbed-name "ubuntu-latest" \
             --dut-name "lance" \
-            --dut-version "${{ needs.build.outputs.dut_version }}" \
-            --dut-timestamp ${{ needs.build.outputs.timestamp }}
+            --dut-version "${{ steps.extract_version.outputs.version }}+${{ steps.commit_info.outputs.short_sha }}" \
+            --dut-timestamp ${{ steps.commit_info.outputs.timestamp }}
 
       - name: Upload results
         if: inputs.pr_number
