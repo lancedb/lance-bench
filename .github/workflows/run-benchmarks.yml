@@ -7,6 +7,15 @@ on:
         description: "Git SHA to benchmark"
         required: true
         type: string
+      pr_number:
+        description: "PR number (enables PR mode - local results only)"
+        required: false
+        type: number
+      pr_repo:
+        description: "PR repository (org/repo format)"
+        required: false
+        type: string
+        default: "lance-format/lance"
 
 jobs:
   bench-io:
@@ -14,6 +23,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-io"
+      pr_number: ${{ inputs.pr_number }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -25,6 +35,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-index"
+      pr_number: ${{ inputs.pr_number }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -35,6 +46,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-linalg"
+      pr_number: ${{ inputs.pr_number }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -46,6 +58,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-file"
+      pr_number: ${{ inputs.pr_number }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -56,6 +69,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-encoding"
+      pr_number: ${{ inputs.pr_number }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -65,7 +79,62 @@ jobs:
     uses: ./.github/workflows/run-python-benchmarks.yml
     with:
       git_sha: ${{ inputs.git_sha }}
+      pr_number: ${{ inputs.pr_number }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
       BENCH_S3_USER_SECRET_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+
+  compare-and-comment:
+    if: ${{ inputs.pr_number }}
+    needs: [bench-io, bench-linalg, bench-encoding, bench-python]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout lance-bench repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          pip install PyGithub
+
+      - name: Download PR results
+        if: inputs.pr_number
+        uses: actions/download-artifact@v4
+        with:
+          # No name, download all artifacts
+          path: ./pr-results.lance
+
+      - name: Merge PR results
+        if: inputs.pr_number
+        run: |
+          uv run python scripts/merge_pr_results.py \
+            --results ./pr-results.lance \
+            --output merged-results.lance
+
+      - name: Compare results
+        env:
+          LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+        run: |
+          uv run python scripts/compare_pr_benchmarks.py \
+            ${{ inputs.git_sha }} \
+            --pr-number ${{ inputs.pr_number }} \
+            --local-results ./merged-results.lance \
+            --output comparison_report.md
+
+      - name: Post comment
+        if: false # Currently disabled while working on local results
+        env:
+          GITHUB_TOKEN: ${{ secrets.PR_COMMENT_TOKEN }}
+        run: |
+          python scripts/post_pr_comment.py \
+            ${{ inputs.pr_number }} \
+            --repo ${{ inputs.pr_repo }} \
+            --body-file comparison_report.md
