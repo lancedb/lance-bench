@@ -161,7 +161,6 @@ jobs:
           cat comparison_report.md
 
       - name: Post comment
-        if: false # Currently disabled while working on local results
         env:
           GITHUB_TOKEN: ${{ secrets.PR_COMMENT_TOKEN }}
         run: |
