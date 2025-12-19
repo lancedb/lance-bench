@@ -30,7 +30,7 @@ def main() -> None:
         help="Directory containing Lance tables to merge",
     )
     parser.add_argument(
-        "--output",
+        "output",
         type=Path,
         help="Output Lance table",
     )
