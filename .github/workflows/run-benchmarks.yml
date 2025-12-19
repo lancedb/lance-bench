@@ -24,7 +24,7 @@ jobs:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-io"
       # Need fromJson here due to https://github.com/orgs/community/discussions/67182
-      pr_number: ${{ fromJson(inputs.pr_number) }}
+      pr_number: ${{ inputs.pr_number && fromJson(inputs.pr_number) || '' }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -36,7 +36,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-index"
-      pr_number: ${{ fromJson(inputs.pr_number) }}
+      pr_number: ${{ inputs.pr_number && fromJson(inputs.pr_number) || '' }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -47,7 +47,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-linalg"
-      pr_number: ${{ fromJson(inputs.pr_number) }}
+      pr_number: ${{ inputs.pr_number && fromJson(inputs.pr_number) || '' }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -59,7 +59,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-file"
-      pr_number: ${{ fromJson(inputs.pr_number) }}
+      pr_number: ${{ inputs.pr_number && fromJson(inputs.pr_number) || '' }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -70,7 +70,7 @@ jobs:
     with:
       git_sha: ${{ inputs.git_sha }}
       crate_path: "rust/lance-encoding"
-      pr_number: ${{ fromJson(inputs.pr_number) }}
+      pr_number: ${{ inputs.pr_number && fromJson(inputs.pr_number) || '' }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -80,7 +80,7 @@ jobs:
     uses: ./.github/workflows/run-python-benchmarks.yml
     with:
       git_sha: ${{ inputs.git_sha }}
-      pr_number: ${{ fromJson(inputs.pr_number) }}
+      pr_number: ${{ inputs.pr_number && fromJson(inputs.pr_number) || '' }}
     secrets:
       LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
@@ -133,6 +133,10 @@ jobs:
             --pr-number ${{ inputs.pr_number }} \
             --local-results ./merged-results.lance \
             --output comparison_report.md
+
+      - name: Print comparison report
+        run: |
+          cat comparison_report.md
 
       - name: Post comment
         if: false # Currently disabled while working on local results

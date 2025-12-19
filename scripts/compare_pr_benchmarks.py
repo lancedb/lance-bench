@@ -26,7 +26,7 @@ def fetch_pr_results(pr_sha: str, local_results_path: Path) -> dict[str, dict]:
         Dictionary mapping benchmark_name to result dict
     """
     print(f"Reading PR results from local table: {local_results_path}")
-    pr_results_df = lance.dataset(local_results_path).to_pandas()
+    pr_results_df = lance.dataset(local_results_path).to_table().to_pandas()
 
     if pr_results_df.empty:
         short_sha = pr_sha[:7]
@@ -101,6 +101,10 @@ def calculate_z_score(pr_value: float, historical_values: list[float]) -> float 
 def determine_status(z_score: float | None, threshold: float = 2.0) -> tuple[str, str]:
     """Determine status based on z-score.
 
+    For benchmarks, lower values are better (faster execution time).
+    - Negative z-score: PR value < baseline mean → improvement (faster)
+    - Positive z-score: PR value > baseline mean → regression (slower)
+
     Args:
         z_score: Calculated z-score (None if not calculable)
         threshold: Threshold for flagging (default 2.0)
@@ -111,9 +115,9 @@ def determine_status(z_score: float | None, threshold: float = 2.0) -> tuple[str
     if z_score is None:
         return "❓", "Insufficient Data"
 
-    if z_score > threshold:
+    if z_score < -threshold:
         return "🚀", "Likely Improved"
-    elif z_score < -threshold:
+    elif z_score > threshold:
         return "⚠️", "Likely Regressed"
     else:
         return "✅", "Within Normal Range"
@@ -160,8 +164,9 @@ def generate_comparison_report(pr_sha: str, pr_number: int, comparisons: list[di
     short_sha = pr_sha[:7]
 
     # Count status categories
-    improvements = [c for c in comparisons if c["z_score"] is not None and c["z_score"] > threshold]
-    regressions = [c for c in comparisons if c["z_score"] is not None and c["z_score"] < -threshold]
+    # Lower values are better, so negative z-score = improvement, positive = regression
+    improvements = [c for c in comparisons if c["z_score"] is not None and c["z_score"] < -threshold]
+    regressions = [c for c in comparisons if c["z_score"] is not None and c["z_score"] > threshold]
     stable = [c for c in comparisons if c["z_score"] is not None and abs(c["z_score"]) <= threshold]
     insufficient_data = [c for c in comparisons if c["z_score"] is None]
 
@@ -245,7 +250,6 @@ def main() -> None:
     parser.add_argument(
         "pr_sha",
         type=str,
-        required=True,
         help="PR commit SHA to compare",
     )
     parser.add_argument(
@@ -361,7 +365,8 @@ def main() -> None:
         print("=" * 80)
 
     # Exit with non-zero if there are regressions
-    regressions = [c for c in comparisons if c["z_score"] is not None and c["z_score"] < -args.threshold]
+    # Lower values are better, so positive z-score = regression
+    regressions = [c for c in comparisons if c["z_score"] is not None and c["z_score"] > args.threshold]
     if regressions:
         print(f"\n⚠️ Found {len(regressions)} potential regression(s)", file=sys.stderr)
         sys.exit(0)  # Don't fail the workflow, just flag it
