@@ -19,7 +19,7 @@ def merge_lance_tables(table_paths: list[Path], output: Path) -> None:
 
 def find_lance_tables(results: Path) -> list[Path]:
     """Find all Lance tables in the given directory"""
-    return [p for p in results.iterdir() if p.is_dir()]
+    return [p / "results.lance" for p in results.iterdir() if p.is_dir()]
 
 
 def main() -> None:
