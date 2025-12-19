@@ -17,9 +17,9 @@ def merge_lance_tables(table_paths: list[Path], output: Path) -> None:
     print(f"Merged {rows_merged} rows into {output}")
 
 
-def find_lance_tables(results: list[Path]) -> list[Path]:
+def find_lance_tables(results: Path) -> list[Path]:
     """Find all Lance tables in the given directory"""
-    return [p for p in results if p.is_dir()]
+    return [p for p in results.iterdir() if p.is_dir()]
 
 
 def main() -> None:
@@ -27,7 +27,6 @@ def main() -> None:
     parser.add_argument(
         "results",
         type=Path,
-        nargs="+",
         help="Directory containing Lance tables to merge",
     )
     parser.add_argument(

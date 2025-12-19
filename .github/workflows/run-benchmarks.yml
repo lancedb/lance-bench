@@ -109,13 +109,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           # No name, download all artifacts
-          path: ./pr-results.lance
+          path: ./pr-results
+
+      - name: List PR results
+        run: |
+          ls -la ./pr-results
 
       - name: Merge PR results
         if: inputs.pr_number
         run: |
           uv run python scripts/merge_pr_results.py \
-            ./pr-results.lance \
+            ./pr-results \
             merged-results.lance
 
       - name: Compare results
