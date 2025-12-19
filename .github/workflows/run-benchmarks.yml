@@ -115,8 +115,8 @@ jobs:
         if: inputs.pr_number
         run: |
           uv run python scripts/merge_pr_results.py \
-            --results ./pr-results.lance \
-            --output merged-results.lance
+            ./pr-results.lance \
+            merged-results.lance
 
       - name: Compare results
         env:

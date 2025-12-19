@@ -33,7 +33,6 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=None,
         help="Output Lance table",
     )
 
