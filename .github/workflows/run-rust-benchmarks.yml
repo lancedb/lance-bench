@@ -14,7 +14,7 @@ on:
       pr_number:
         description: "PR number (enables PR mode - local results only)"
         required: false
-        type: number
+        type: string
     secrets:
       LANCE_BENCH_DB_URI:
         required: true
@@ -88,7 +88,7 @@ jobs:
 
       - name: Publish results
         env:
-          LANCE_BENCH_URI: ${{ inputs.pr_number && './pr-results.lance' || secrets.LANCE_BENCH_DB_URI }}
+          LANCE_BENCH_URI: ${{ inputs.pr_number != '' && './pr-results.lance' || secrets.LANCE_BENCH_DB_URI }}
           AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
         run: |
@@ -100,7 +100,7 @@ jobs:
             --dut-timestamp ${{ steps.commit_info.outputs.timestamp }}
 
       - name: Upload results
-        if: inputs.pr_number
+        if: inputs.pr_number != ''
         uses: actions/upload-artifact@v4
         with:
           name: pr-results-rust-${{ steps.sanitize.outputs.crate_name }}
