@@ -2,11 +2,13 @@
 
 mod lance;
 mod parquet;
+mod parquet_async;
 mod traits;
 mod vortex;
 
 pub use lance::LanceEngine;
 pub use parquet::ParquetEngine;
+pub use parquet_async::ParquetAsyncEngine;
 pub use traits::{DatasetHandle, EngineRegistry};
 pub use vortex::VortexEngine;
 
@@ -15,6 +17,7 @@ pub fn create_registry() -> EngineRegistry {
     let mut registry = EngineRegistry::new();
     registry.register(std::sync::Arc::new(LanceEngine::new()));
     registry.register(std::sync::Arc::new(ParquetEngine::new()));
+    registry.register(std::sync::Arc::new(ParquetAsyncEngine::new()));
     registry.register(std::sync::Arc::new(VortexEngine::new()));
     registry
 }
