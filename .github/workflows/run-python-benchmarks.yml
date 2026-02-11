@@ -71,7 +71,7 @@ jobs:
           cd lance/python
           python -m venv venv
           source venv/bin/activate
-          pip install maturin pytest pytest-benchmark requests duckdb
+          pip install maturin pytest pytest-benchmark requests duckdb datasets
 
       - name: Build Lance Python package
         run: |
