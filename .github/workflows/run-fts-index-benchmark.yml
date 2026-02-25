@@ -1,0 +1,123 @@
+name: Run FTS Index Training Benchmarks
+
+on:
+  workflow_call:
+    inputs:
+      git_sha:
+        description: "Git SHA to benchmark"
+        required: true
+        type: string
+      pr_number:
+        description: "PR number (enables PR mode - local results only)"
+        required: false
+        type: string
+    secrets:
+      LANCE_BENCH_DB_URI:
+        required: true
+      BENCH_S3_USER_ACCESS_KEY:
+        required: true
+      BENCH_S3_USER_SECRET_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: "Git SHA to benchmark"
+        required: true
+        type: string
+
+jobs:
+  benchmark:
+    runs-on: warp-ubuntu-latest-x64-8x
+    steps:
+      - name: Checkout lance-bench repository
+        uses: actions/checkout@v4
+
+      - name: Checkout lance repository (for version info)
+        uses: actions/checkout@v4
+        with:
+          repository: lance-format/lance
+          ref: ${{ inputs.git_sha }}
+          path: lance
+          fetch-depth: 1
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Extract version from Cargo.toml
+        id: extract_version
+        run: |
+          cd lance
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Get commit timestamp
+        id: commit_info
+        run: |
+          cd lance
+          TIMESTAMP=$(git show -s --format=%ct HEAD)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Update Lance git revision in Cargo.toml
+        run: |
+          cd benchmarks/train_fts_index
+          sed -i 's|rev = "[a-f0-9]*"|rev = "${{ inputs.git_sha }}"|g' Cargo.toml
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: benchmarks/train_fts_index
+
+      - name: Build benchmark
+        run: |
+          cd benchmarks/train_fts_index
+          cargo build --release
+
+      - name: Cache HuggingFace datasets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/lance-bench/fts-index
+          key: fts-index-data-cache-v1
+
+      - name: Run FTS index benchmark
+        run: |
+          ./benchmarks/train_fts_index/target/release/train-fts-index-benchmark \
+            --dataset all \
+            --output fts-index-results.json
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install lance-bench dependencies
+        run: uv sync
+
+      - name: Publish results
+        env:
+          LANCE_BENCH_URI: ${{ inputs.pr_number != '' && './pr-results-fts-index.lance' || secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+        run: |
+          uv run python scripts/publish_fts_index.py \
+            fts-index-results.json \
+            --testbed-name "ubuntu-latest" \
+            --dut-name "lance" \
+            --dut-version "${{ steps.extract_version.outputs.version }}+${{ steps.commit_info.outputs.short_sha }}" \
+            --dut-timestamp ${{ steps.commit_info.outputs.timestamp }}
+
+      - name: Upload results
+        if: inputs.pr_number != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-results-fts-index
+          path: ./pr-results-fts-index.lance

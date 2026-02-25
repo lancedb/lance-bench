@@ -105,12 +105,34 @@ jobs:
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
       BENCH_S3_USER_SECRET_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
 
+  bench-fts-index:
+    if: ${{ inputs.run_python }}
+    uses: ./.github/workflows/run-fts-index-benchmark.yml
+    with:
+      git_sha: ${{ inputs.git_sha }}
+      pr_number: ${{ inputs.pr_number != '' && fromJson(inputs.pr_number) || '' }}
+    secrets:
+      LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+      BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+      BENCH_S3_USER_SECRET_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+
+  bench-fts-index-postgres:
+    if: ${{ inputs.run_python }}
+    uses: ./.github/workflows/run-fts-index-postgres-benchmark.yml
+    with:
+      git_sha: ${{ inputs.git_sha }}
+      pr_number: ${{ inputs.pr_number != '' && fromJson(inputs.pr_number) || '' }}
+    secrets:
+      LANCE_BENCH_DB_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+      BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+      BENCH_S3_USER_SECRET_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+
   compare-and-comment:
     # The success() || failure() is to ensure that the job runs
     # even if one or more dependent steps were skipped.  By default,
     # GHA would propagate that skip.
     if: ${{ inputs.pr_number && (success() || failure()) }}
-    needs: [bench-io, bench-linalg, bench-encoding, bench-python]
+    needs: [bench-io, bench-linalg, bench-encoding, bench-python, bench-fts-index, bench-fts-index-postgres]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout lance-bench repository

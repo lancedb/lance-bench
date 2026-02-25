@@ -1,0 +1,19 @@
+{
+  "benchmark_type": "train_fts_index_postgres",
+  "timestamp": 1771530626,
+  "results": [
+    {
+      "benchmark_name": "train_fts_index_postgres/fineweb",
+      "dataset_name": "fineweb",
+      "dataset_description": "Large text per row: FineWeb web crawl documents",
+      "num_rows": 15728715,
+      "total_text_bytes": 48373408380,
+      "duration_ns": 3706504792101,
+      "peak_rss_bytes": 70021120,
+      "delta_rss_bytes": 0,
+      "values_ns": [
+        3706504792101
+      ]
+    }
+  ]
+}

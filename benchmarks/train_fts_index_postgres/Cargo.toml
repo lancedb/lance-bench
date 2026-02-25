@@ -1,0 +1,28 @@
+[package]
+name = "train-fts-index-postgres-benchmark"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+postgresql_embedded = "0.20"
+bytes = "1"
+tokio-postgres = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+arrow-array = "57"
+arrow-schema = "57"
+parquet = { version = "57", features = ["arrow"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+futures = "0.3"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0"
+indicatif = "0.17"
+jemallocator = "0.5"
+libc = "0.2"
+env_logger = "0.11"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
