@@ -1,0 +1,20 @@
+{
+  "benchmark_type": "train_ivf_index",
+  "timestamp": 1772046362,
+  "results": [
+    {
+      "benchmark_name": "train_ivf_index/vectors=10000000/dim=768/partitions=2441/distance=l2",
+      "num_vectors": 10000000,
+      "dimensions": 768,
+      "num_partitions": 2441,
+      "num_sub_vectors": 48,
+      "distance_type": "l2",
+      "duration_ns": 223041488815,
+      "peak_rss_bytes": 2175373312,
+      "delta_rss_bytes": 2138161152,
+      "values_ns": [
+        223041488815
+      ]
+    }
+  ]
+}
