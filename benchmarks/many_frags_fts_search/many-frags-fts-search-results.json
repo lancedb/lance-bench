@@ -1,0 +1,29 @@
+{
+  "benchmark_type": "many_frags_fts_search",
+  "timestamp": 1772502275,
+  "results": [
+    {
+      "benchmark_name": "many_frags_fts_search/rows=1000000/fragments=500/rows_per_frag=10/query=history",
+      "num_rows": 1000000,
+      "num_extra_fragments": 500,
+      "rows_per_fragment": 10,
+      "query": "history",
+      "iterations": 10,
+      "duration_ns": 90453852,
+      "min_ns": 87762745,
+      "max_ns": 93417850,
+      "values_ns": [
+        91530745,
+        88017787,
+        88986645,
+        87762745,
+        91727830,
+        90505811,
+        90690102,
+        91237893,
+        90661117,
+        93417850
+      ]
+    }
+  ]
+}
