@@ -1,0 +1,87 @@
+[package]
+name = "pe-throughput-benchmark"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+# workspace crates (path deps)
+plan-executor = { path = "/home/ubuntu/sophon/src/rust/plan-executor" }
+sophon-protos = { path = "/home/ubuntu/sophon/src/rust/sophon-protos" }
+sophon-caching = { path = "/home/ubuntu/sophon/src/rust/sophon-caching" }
+
+# lance (use same paths that sophon's workspace resolves to via its symlink)
+lance = { path = "/home/ubuntu/sophon/src/lance/rust/lance", features = ["dynamodb", "substrait"] }
+lance-datagen = { path = "/home/ubuntu/sophon/src/lance/rust/lance-datagen" }
+lance-encoding = { path = "/home/ubuntu/sophon/src/lance/rust/lance-encoding" }
+
+arrow = "57"
+arrow-array = "57"
+arrow-schema = "57"
+
+# async / server
+tokio = { version = "1", features = ["full"] }
+tonic = { version = "0.14", features = ["tls-ring"] }
+tower = "~0.4"
+hyper-util = "0.1"
+tokio-stream = "~0.1"
+tokio-util = "~0.7"
+
+# object store (for trace_reads binary)
+object_store = "0.12"
+bytes = "1"
+async-trait = "0.1"
+
+# other
+futures = "0.3"
+rand = "~0.8"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0"
+indicatif = "0.17"
+tikv-jemallocator = "0.6"
+env_logger = "0.11"
+tempfile = "3.20"
+uuid = { version = "1", features = ["v4"] }
+prometheus = { version = "0.13.4", features = ["process"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.17"
+
+[patch."https://github.com/lance-format/lance.git"]
+lance = { path = "/home/ubuntu/sophon/src/lance/rust/lance" }
+lance-arrow = { path = "/home/ubuntu/sophon/src/lance/rust/lance-arrow" }
+lance-core = { path = "/home/ubuntu/sophon/src/lance/rust/lance-core" }
+lance-datafusion = { path = "/home/ubuntu/sophon/src/lance/rust/lance-datafusion" }
+lance-datagen = { path = "/home/ubuntu/sophon/src/lance/rust/lance-datagen" }
+lance-encoding = { path = "/home/ubuntu/sophon/src/lance/rust/lance-encoding" }
+lance-file = { path = "/home/ubuntu/sophon/src/lance/rust/lance-file" }
+lance-index = { path = "/home/ubuntu/sophon/src/lance/rust/lance-index" }
+lance-io = { path = "/home/ubuntu/sophon/src/lance/rust/lance-io" }
+lance-linalg = { path = "/home/ubuntu/sophon/src/lance/rust/lance-linalg" }
+lance-namespace = { path = "/home/ubuntu/sophon/src/lance/rust/lance-namespace" }
+lance-namespace-impls = { path = "/home/ubuntu/sophon/src/lance/rust/lance-namespace-impls" }
+lance-table = { path = "/home/ubuntu/sophon/src/lance/rust/lance-table" }
+
+[patch.crates-io]
+lancedb = { path = "/home/ubuntu/sophon/src/lancedb/rust/lancedb" }
+lance = { path = "/home/ubuntu/sophon/src/lance/rust/lance" }
+lance-arrow = { path = "/home/ubuntu/sophon/src/lance/rust/lance-arrow" }
+lance-core = { path = "/home/ubuntu/sophon/src/lance/rust/lance-core" }
+lance-datafusion = { path = "/home/ubuntu/sophon/src/lance/rust/lance-datafusion" }
+lance-datagen = { path = "/home/ubuntu/sophon/src/lance/rust/lance-datagen" }
+lance-encoding = { path = "/home/ubuntu/sophon/src/lance/rust/lance-encoding" }
+lance-file = { path = "/home/ubuntu/sophon/src/lance/rust/lance-file" }
+lance-index = { path = "/home/ubuntu/sophon/src/lance/rust/lance-index" }
+lance-io = { path = "/home/ubuntu/sophon/src/lance/rust/lance-io" }
+lance-linalg = { path = "/home/ubuntu/sophon/src/lance/rust/lance-linalg" }
+lance-table = { path = "/home/ubuntu/sophon/src/lance/rust/lance-table" }
+lance-namespace = { path = "/home/ubuntu/sophon/src/lance/rust/lance-namespace" }
+lance-namespace-impls = { path = "/home/ubuntu/sophon/src/lance/rust/lance-namespace-impls" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
