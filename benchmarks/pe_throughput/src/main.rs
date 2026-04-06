@@ -124,6 +124,8 @@ enum ColumnSet {
     IdAndFloats,
     /// Take id + all payload columns (no vector).
     IdAndPayloads,
+    /// Take only the vector column.
+    VectorOnly,
     /// Take all columns including vector.
     All,
 }
@@ -133,6 +135,9 @@ impl ColumnSet {
         let mut cols = vec!["id"];
         match self {
             ColumnSet::IdOnly => {}
+            ColumnSet::VectorOnly => {
+                cols.push("vector");
+            }
             ColumnSet::IdAndStrings => {
                 cols.extend(["str_payload_0", "str_payload_1", "str_payload_2", "str_payload_3"]);
             }
@@ -269,6 +274,7 @@ fn build_cache_config(
 ) -> Option<ChainedCachesConfig> {
     let capacity = cache_size_mb * 1024 * 1024;
     let page_size = Some(64 * 1024u64);
+    let disk_page_size = Some(1024 * 1024u64);
 
     match cache_mode {
         CacheMode::Memory => Some(ChainedCachesConfig::new(vec![
@@ -284,7 +290,7 @@ fn build_cache_config(
             ObjectStoreCacheConfig::disk(
                 [disk_cache_dir],
                 capacity,
-                page_size,
+                disk_page_size,
                 Some(2),
                 None,
                 None,
