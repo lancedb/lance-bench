@@ -5,7 +5,7 @@ This script runs on a schedule (4x daily) and:
 1. Fetches the latest commit from lance-format/lance repository
 2. Checks if benchmark results already exist for that commit
 3. Triggers benchmark workflow if no results exist (fire-and-forget)
-4. Exits gracefully on transient errors (retries next scheduled run)
+4. Exits with a non-zero status on any error so the run is visible.
 """
 
 import os
@@ -56,14 +56,14 @@ def get_short_sha(commit_sha: str) -> str:
     return commit_sha[:7]
 
 
-def fetch_latest_commit(github_client: Github) -> tuple[str, str, str] | None:
+def fetch_latest_commit(github_client: Github) -> tuple[str, str, str]:
     """Fetch the latest commit from the lance repository.
 
     Args:
         github_client: GitHub client instance
 
     Returns:
-        Tuple of (commit_sha, author, message_preview) or None on error
+        Tuple of (commit_sha, author, message_preview). Exits with non-zero on error.
     """
     try:
         repo = github_client.get_repo(LANCE_REPO)
@@ -77,14 +77,12 @@ def fetch_latest_commit(github_client: Github) -> tuple[str, str, str] | None:
         return commit_sha, author, message_preview
 
     except RateLimitExceededException:
-        print("⚠️  GitHub API rate limit exceeded")
-        print("   Will retry in next scheduled run")
-        sys.exit(0)  # Exit gracefully
+        print("❌ GitHub API rate limit exceeded")
+        sys.exit(1)
 
     except Exception as e:
-        print(f"⚠️  Error fetching latest commit: {e}")
-        print("   Will retry in next scheduled run")
-        sys.exit(0)  # Exit gracefully
+        print(f"❌ Error fetching latest commit: {e}")
+        sys.exit(1)
 
 
 def has_results_for_commit(commit_sha: str) -> bool:
@@ -182,13 +180,7 @@ def main() -> None:
 
     # Fetch latest commit
     print(f"Fetching latest commit from {LANCE_REPO}...")
-    commit_info = fetch_latest_commit(github_client)
-
-    if commit_info is None:
-        print("ℹ️  Exiting due to error (will retry in next run)")
-        return
-
-    commit_sha, author, message_preview = commit_info
+    commit_sha, author, message_preview = fetch_latest_commit(github_client)
     short_sha = get_short_sha(commit_sha)
 
     print(f"Latest commit: {short_sha}")
@@ -221,9 +213,8 @@ def main() -> None:
         print("✅ Benchmark workflow triggered successfully")
     else:
         print()
-        print("⚠️  Workflow trigger failed (non-fatal, will retry in next run)")
-        # Exit with code 0 to avoid spam notifications
-        sys.exit(0)
+        print("❌ Workflow trigger failed")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
