@@ -83,7 +83,7 @@ const DATASETS: &[DatasetConfig] = &[
         hf_id: "HuggingFaceFW/fineweb",
         hf_config: "sample-10BT",
         column: "text",
-        default_rows: 10_000_000,
+        default_rows: 1_000_000,
         description: "Large text per row: FineWeb web crawl documents",
     },
     DatasetConfig {
