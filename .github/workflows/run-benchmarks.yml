@@ -116,6 +116,94 @@ jobs:
       BENCH_S3_USER_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
       BENCH_S3_USER_SECRET_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
 
+  analyze-results:
+    # Runs after all benchmark jobs complete (pass or fail), but not for PR runs.
+    # Investigates failures and regressions, then takes corrective action.
+    if: ${{ !inputs.pr_number && !cancelled() }}
+    needs: [bench-io, bench-linalg, bench-encoding, bench-python, bench-fts-index]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout lance-bench
+        uses: actions/checkout@v4
+        with:
+          # Use PAT so the agent can push fixes back to the repo.
+          token: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Collect run context
+        env:
+          GH_TOKEN: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+        run: |
+          {
+            echo "# Benchmark Run Context"
+            echo ""
+            echo "**Lance commit SHA:** ${{ inputs.git_sha }}"
+            echo "**Run ID:** ${{ github.run_id }}"
+            echo "**Run URL:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo "## Job Results"
+            echo ""
+            gh run view ${{ github.run_id }} --json jobs \
+              --jq '.jobs[] | select(.name != "analyze-results") | "- **\(.name)**: \(.conclusion // "in_progress")"' \
+              || echo "(Could not fetch job statuses)"
+            echo ""
+            echo "## Failed Step Logs"
+            echo ""
+          } > agent_context.md
+          gh run view ${{ github.run_id }} --log-failed >> agent_context.md 2>/dev/null \
+            || echo "(No failed steps)" >> agent_context.md
+
+      - name: Run regression analysis
+        continue-on-error: true
+        env:
+          LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+        run: |
+          {
+            echo ""
+            echo "## Statistical Regression Analysis"
+            echo ""
+            uv run python scripts/regression_report.py \
+              --output /tmp/regression_chart.html 2>&1
+          } >> agent_context.md
+
+      - name: Load agent prompt
+        id: load-prompt
+        run: |
+          {
+            echo "prompt<<PROMPT_END"
+            cat .github/analyze_agent_prompt.md
+            echo "PROMPT_END"
+          } >> $GITHUB_OUTPUT
+
+      - name: Analyze results with Claude
+        uses: anthropics/claude-code-action@beta
+        env:
+          GH_TOKEN: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+          LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_tools: "Bash,Read,Edit,Write"
+          max_turns: "30"
+          prompt: ${{ steps.load-prompt.outputs.prompt }}
+
   compare-and-comment:
     # The success() || failure() is to ensure that the job runs
     # even if one or more dependent steps were skipped.  By default,
