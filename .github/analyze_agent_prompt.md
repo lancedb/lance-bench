@@ -39,10 +39,10 @@ Read the failure logs and decide which category fits best:
 - If you are not confident in the fix (e.g. the required change is unclear or risky), open an issue in **lancedb/lance-bench** describing what needs updating instead of guessing
 
 **Lance source bug:**
-- Check for a duplicate first: `gh issue list --repo lance-format/lance --search "benchmark <keyword>" --limit 5`
+- Check for a duplicate first: `GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance --search "benchmark <keyword>" --limit 5`
 - Create an issue:
   ```
-  gh issue create \
+  GH_TOKEN=$LANCE_GH_TOKEN gh issue create \
     --repo lance-format/lance \
     --title "Benchmark failure: <short description>" \
     --body "<full details: Lance SHA, job name, error output, reproduction hints>"
@@ -69,7 +69,7 @@ For each benchmark that warrants investigation:
 
 ```bash
 # Get recent Lance commit history (adjust per_page if needed)
-gh api "repos/lance-format/lance/commits?sha=<LANCE_SHA>&per_page=40" \
+GH_TOKEN=$LANCE_GH_TOKEN gh api "repos/lance-format/lance/commits?sha=<LANCE_SHA>&per_page=40" \
   --jq '.[] | "\(.commit.author.date)  \(.sha[0:7])  \(.commit.message | split("\n")[0])"'
 ```
 
@@ -98,12 +98,12 @@ for _, r in rows.tail(8).iterrows():
 
 Check for duplicates first:
 ```bash
-gh issue list --repo lance-format/lance --search "<benchmark_name> regression" --limit 5
+GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance --search "<benchmark_name> regression" --limit 5
 ```
 
 Then create an issue:
 ```bash
-gh issue create \
+GH_TOKEN=$LANCE_GH_TOKEN gh issue create \
   --repo lance-format/lance \
   --title "Performance regression: <benchmark_name> (~<pct>% slower since <approx-date>)" \
   --body "<analysis: magnitude, timing, suspected commit SHA(s), benchmark name and crate>"

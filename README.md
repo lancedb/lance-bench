@@ -88,9 +88,11 @@ Required secrets for CI workflows:
 - `LANCE_BENCH_DB_URI` - Database URI (S3 or local path)
 - `BENCH_S3_USER_ACCESS_KEY` - AWS access key
 - `BENCH_S3_USER_SECRET_KEY` - AWS secret key
-- `SCHEDULER_GITHUB_TOKEN` - GitHub PAT with `actions:write` and `contents:read` permissions
+- `SCHEDULER_GITHUB_TOKEN` - GitHub PAT with `actions:write` and `contents:write` permissions on `lancedb/lance-bench` (used to trigger workflows, push automated fixes, and read job logs)
+- `LANCE_GITHUB_TOKEN` - GitHub PAT with `issues:write` permission on `lance-format/lance` (used by the analysis agent to open bug and regression issues in the Lance repo)
+- `OPENAI_API_KEY` - OpenAI API key for the Codex analysis agent
 
-> **Note**: The default `GITHUB_TOKEN` cannot trigger other workflows, so `SCHEDULER_GITHUB_TOKEN` is required for the scheduler.
+> **Note**: The default `GITHUB_TOKEN` cannot trigger other workflows, so `SCHEDULER_GITHUB_TOKEN` is required for the scheduler. Two separate tokens are used because `SCHEDULER_GITHUB_TOKEN` is scoped to `lancedb/lance-bench` and cannot create issues in `lance-format/lance`.
 
 ## Usage
 

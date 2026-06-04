@@ -182,27 +182,18 @@ jobs:
               --output /tmp/regression_chart.html 2>&1
           } >> agent_context.md
 
-      - name: Load agent prompt
-        id: load-prompt
-        run: |
-          {
-            echo "prompt<<PROMPT_END"
-            cat .github/analyze_agent_prompt.md
-            echo "PROMPT_END"
-          } >> $GITHUB_OUTPUT
-
-      - name: Analyze results with Claude
-        uses: anthropics/claude-code-action@beta
+      - name: Analyze results with Codex
+        uses: openai/codex-action@latest
         env:
           GH_TOKEN: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+          LANCE_GH_TOKEN: ${{ secrets.LANCE_GITHUB_TOKEN }}
           LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
           AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_tools: "Bash,Read,Edit,Write"
-          max_turns: "30"
-          prompt: ${{ steps.load-prompt.outputs.prompt }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/analyze_agent_prompt.md
+          sandbox: danger-full-access
 
   compare-and-comment:
     # The success() || failure() is to ensure that the job runs
