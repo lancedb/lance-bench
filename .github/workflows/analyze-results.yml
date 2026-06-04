@@ -1,0 +1,105 @@
+name: Analyze Benchmark Results
+
+on:
+  workflow_dispatch:
+    inputs:
+      bench_run_id:
+        description: "run-benchmarks.yml run ID to analyze (leave empty for most recent)"
+        required: false
+        type: string
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout lance-bench
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Resolve bench run ID and git SHA
+        env:
+          GH_TOKEN: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+        run: |
+          BENCH_RUN_ID="${{ inputs.bench_run_id }}"
+
+          if [ -z "$BENCH_RUN_ID" ]; then
+            echo "No run ID provided — finding most recent completed non-PR run-benchmarks.yml run..."
+            BENCH_RUN_ID=$(gh api \
+              "repos/${{ github.repository }}/actions/workflows/run-benchmarks.yml/runs?per_page=20&event=workflow_dispatch" \
+              --jq '[.workflow_runs[] | select(.status == "completed" and (.inputs.pr_number == "" or .inputs.pr_number == null))] | first | .id')
+            echo "Resolved run ID: $BENCH_RUN_ID"
+          fi
+
+          GIT_SHA=$(gh api \
+            "repos/${{ github.repository }}/actions/runs/$BENCH_RUN_ID" \
+            --jq '.inputs.git_sha')
+
+          echo "BENCH_RUN_ID=$BENCH_RUN_ID" >> $GITHUB_ENV
+          echo "GIT_SHA=$GIT_SHA" >> $GITHUB_ENV
+
+      - name: Collect run context
+        env:
+          GH_TOKEN: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+        run: |
+          {
+            echo "# Benchmark Run Context"
+            echo ""
+            echo "**Lance commit SHA:** $GIT_SHA"
+            echo "**Run ID:** $BENCH_RUN_ID"
+            echo "**Run URL:** https://github.com/${{ github.repository }}/actions/runs/$BENCH_RUN_ID"
+            echo ""
+            echo "## Job Results"
+            echo ""
+            gh run view $BENCH_RUN_ID --json jobs \
+              --jq '.jobs[] | select(.name != "analyze-results") | "- **\(.name)**: \(.conclusion // "in_progress")"' \
+              || echo "(Could not fetch job statuses)"
+            echo ""
+            echo "## Failed Step Logs"
+            echo ""
+          } > agent_context.md
+          gh run view $BENCH_RUN_ID --log-failed >> agent_context.md 2>/dev/null \
+            || echo "(No failed steps)" >> agent_context.md
+
+      - name: Run regression analysis
+        continue-on-error: true
+        env:
+          LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+        run: |
+          {
+            echo ""
+            echo "## Statistical Regression Analysis"
+            echo ""
+            uv run python scripts/regression_report.py \
+              --output /tmp/regression_chart.html 2>&1
+          } >> agent_context.md
+
+      - name: Analyze results with Codex
+        uses: openai/codex-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
+          LANCE_GH_TOKEN: ${{ secrets.LANCE_GITHUB_TOKEN }}
+          LANCE_BENCH_URI: ${{ secrets.LANCE_BENCH_DB_URI }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_S3_USER_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_S3_USER_SECRET_KEY }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/analyze_agent_prompt.md
+          sandbox: danger-full-access

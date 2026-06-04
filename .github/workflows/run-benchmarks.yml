@@ -183,7 +183,7 @@ jobs:
           } >> agent_context.md
 
       - name: Analyze results with Codex
-        uses: openai/codex-action@latest
+        uses: openai/codex-action@v1
         env:
           GH_TOKEN: ${{ secrets.SCHEDULER_GITHUB_TOKEN }}
           LANCE_GH_TOKEN: ${{ secrets.LANCE_GITHUB_TOKEN }}
