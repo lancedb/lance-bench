@@ -193,7 +193,18 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/analyze_agent_prompt.md
+          output-file: analysis_summary.txt
           sandbox: danger-full-access
+
+      - name: Upload analysis artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-analysis-${{ inputs.git_sha }}
+          path: |
+            agent_context.md
+            analysis_summary.txt
+          retention-days: 30
 
   compare-and-comment:
     # The success() || failure() is to ensure that the job runs
