@@ -39,7 +39,12 @@ Read the failure logs and decide which category fits best:
 - If you are not confident in the fix (e.g. the required change is unclear or risky), open an issue in **lancedb/lance-bench** describing what needs updating instead of guessing
 
 **Lance source bug:**
-- Check for a duplicate first: `GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance --search "benchmark <keyword>" --limit 5`
+- Check for duplicates — search open issues by error keyword AND by job name; also check issues closed in the last 14 days:
+  ```bash
+  GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance --search "benchmark <keyword>" --state open --limit 10
+  GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance --search "benchmark <keyword>" --state closed --limit 5
+  ```
+- Do not create an issue if a matching open issue exists, or if a matching issue was closed within the last 14 days.
 - Create an issue:
   ```
   GH_TOKEN=$LANCE_GH_TOKEN gh issue create \
@@ -96,12 +101,30 @@ for _, r in rows.tail(8).iterrows():
 
 ### 3. Open an issue for confirmed regressions
 
-Check for duplicates first:
+Before creating any issue, do both of these duplicate checks:
+
 ```bash
-GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance --search "<benchmark_name> regression" --limit 5
+# 1. Search by benchmark name
+GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance \
+  --search "<benchmark_name>" --state open --limit 10
+
+# 2. Search broadly for any recent benchmark/regression issues
+GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance \
+  --search "benchmark regression performance" --state open --limit 10
 ```
 
-Then create an issue:
+**Do not create an issue if:**
+- Any open issue mentions the same benchmark name, even if the title differs
+- Any open issue was filed within the last 7 days and relates to benchmark performance generally
+- A closed issue for this benchmark was closed within the last 14 days (it may have been intentionally closed as "won't fix" or "not a bug")
+
+```bash
+# Also check recently closed issues
+GH_TOKEN=$LANCE_GH_TOKEN gh issue list --repo lance-format/lance \
+  --search "<benchmark_name>" --state closed --limit 5
+```
+
+Only if no duplicates exist, create an issue:
 ```bash
 GH_TOKEN=$LANCE_GH_TOKEN gh issue create \
   --repo lance-format/lance \
