@@ -43,8 +43,21 @@ jobs:
       - name: Install protobuf compiler
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+      - name: Read Lance Rust toolchain
+        id: rust_toolchain
+        run: |
+          CHANNEL=""
+          if [ -f lance/rust-toolchain.toml ]; then
+            CHANNEL=$(awk -F '"' '/^[[:space:]]*channel[[:space:]]*=/ { print $2; exit }' lance/rust-toolchain.toml)
+          elif [ -f lance/rust-toolchain ]; then
+            CHANNEL=$(head -n 1 lance/rust-toolchain)
+          fi
+          echo "channel=${CHANNEL:-stable}" >> "$GITHUB_OUTPUT"
+
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust_toolchain.outputs.channel }}
 
       - name: Extract version from Cargo.toml
         id: extract_version
