@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 lance = { git = "https://github.com/lance-format/lance", rev = "7d8d8c57f526dbddb6f0228da2bae69e7bd43558" }
 lance-index = { git = "https://github.com/lance-format/lance", rev = "7d8d8c57f526dbddb6f0228da2bae69e7bd43558" }
+time = "=0.3.47"
 tokio = { version = "1.0", features = ["full"] }
 arrow-array = "58"
 arrow-schema = "58"
