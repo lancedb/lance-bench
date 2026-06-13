@@ -59,6 +59,9 @@ jobs:
         with:
           toolchain: ${{ steps.rust_toolchain.outputs.channel }}
 
+      - name: Pin Rust toolchain for build commands
+        run: echo "RUSTUP_TOOLCHAIN=${{ steps.rust_toolchain.outputs.channel }}" >> "$GITHUB_ENV"
+
       - name: Extract version from Cargo.toml
         id: extract_version
         run: |

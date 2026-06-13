@@ -58,6 +58,9 @@ jobs:
         with:
           toolchain: ${{ steps.rust_toolchain.outputs.channel }}
 
+      - name: Pin Rust toolchain for build commands
+        run: echo "RUSTUP_TOOLCHAIN=${{ steps.rust_toolchain.outputs.channel }}" >> "$GITHUB_ENV"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
