@@ -1,3 +1,6 @@
+[resolver]
+incompatible-rust-versions = "fallback"
+
 [profile.release]
 lto = "thin"
 codegen-units = 16
