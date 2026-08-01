@@ -94,7 +94,7 @@ jobs:
         run: |
           cd lance/python
           source venv/bin/activate
-          maturin develop --release
+          maturin develop --release --features datagen
 
       - name: Generate benchmark datasets
         run: |
