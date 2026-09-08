@@ -485,6 +485,12 @@ Examples:
         default=100,
         help="Number of data points to display per page in the chart (default: 100)",
     )
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=50,
+        help="Maximum number of benchmarks to chart, taken from the top of the p-value ranking (default: 50)",
+    )
 
     args = parser.parse_args()
 
@@ -506,8 +512,14 @@ Examples:
             print("No benchmarks with sufficient data for analysis")
             sys.exit(1)
 
-        # Print summary
+        # Print summary across all benchmarks before truncating for the chart
         print_summary(analyzed_benchmarks, args.threshold)
+
+        # Limit to top-n benchmarks for charting; the rest are summarised above
+        # but excluded from the HTML to keep file size and render time manageable.
+        if len(analyzed_benchmarks) > args.top_n:
+            print(f"\nℹ️  Charting top {args.top_n} of {len(analyzed_benchmarks)} benchmarks (use --top-n to change).")
+            analyzed_benchmarks = analyzed_benchmarks[: args.top_n]
 
         # Create chart
         create_regression_chart(analyzed_benchmarks, args.output, args.page_size)
