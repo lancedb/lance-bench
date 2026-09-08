@@ -177,20 +177,16 @@ def create_regression_chart(
         data_points = []
         for r in results:
             ts = datetime.fromtimestamp(r["dut"]["timestamp"])
-            hover = (
-                f"<b>{benchmark_name}</b><br>"
-                f"Version: {r['dut']['version']}<br>"
-                f"Timestamp: {ts.strftime('%Y-%m-%d %H:%M:%S')}<br>"
-                f"Mean: {r['summary']['mean'] / divisor:.2f} {unit_label}<br>"
-                f"Min: {r['summary']['min'] / divisor:.2f} {unit_label}<br>"
-                f"Max: {r['summary']['max'] / divisor:.2f} {unit_label}<br>"
-                f"Std Dev: {r['summary']['standard_deviation'] / divisor:.2f} {unit_label}"
-            )
+            # Store raw numbers only; hover text is built in JavaScript on demand
+            # to avoid embedding ~250 chars of HTML per data point for all history.
             data_points.append(
                 {
-                    "date": ts.isoformat(),
-                    "mean_scaled": r["summary"]["mean"] / divisor,
-                    "hover": hover,
+                    "d": ts.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "m": round(r["summary"]["mean"] / divisor, 4),
+                    "n": round(r["summary"]["min"] / divisor, 4),
+                    "x": round(r["summary"]["max"] / divisor, 4),
+                    "s": round(r["summary"]["standard_deviation"] / divisor, 4),
+                    "v": r["dut"]["version"],
                 }
             )
         all_benchmark_data[benchmark_name] = {
@@ -218,13 +214,24 @@ def create_regression_chart(
         # Page 0: most recent page_size data points
         initial_data = bm_data["data"][-page_size:]
 
+        hover_texts = [
+            f"<b>{benchmark_name}</b><br>"
+            f"Version: {d['v']}<br>"
+            f"Date: {d['d'][:10]}<br>"
+            f"Mean: {d['m']:.4g} {unit_label}<br>"
+            f"Min: {d['n']:.4g} {unit_label}<br>"
+            f"Max: {d['x']:.4g} {unit_label}<br>"
+            f"Std Dev: {d['s']:.4g} {unit_label}"
+            for d in initial_data
+        ]
+
         fig.add_trace(
             go.Scatter(
-                x=[d["date"] for d in initial_data],
-                y=[d["mean_scaled"] for d in initial_data],
+                x=[d["d"] for d in initial_data],
+                y=[d["m"] for d in initial_data],
                 mode="lines+markers",
                 name=benchmark_name,
-                hovertext=[d["hover"] for d in initial_data],
+                hovertext=hover_texts,
                 hoverinfo="text",
                 marker={"size": 6},
                 line={"width": 2},
@@ -237,8 +244,8 @@ def create_regression_chart(
         # Add split line between "recent" and "older" results.
         # Only show it if the split point falls within the initial visible range.
         if len(results) >= 4 and initial_data:
-            split_date = datetime.fromtimestamp(results[-4]["dut"]["timestamp"]).isoformat()
-            if split_date >= initial_data[0]["date"]:
+            split_date = datetime.fromtimestamp(results[-4]["dut"]["timestamp"]).strftime("%Y-%m-%dT%H:%M:%S")
+            if split_date >= initial_data[0]["d"]:
                 xref = "x" if idx == 0 else f"x{idx + 1}"
                 yref = "y domain" if idx == 0 else f"y{idx + 1} domain"
                 fig.add_shape(
@@ -281,9 +288,10 @@ def create_regression_chart(
     data_json = json.dumps(all_benchmark_data)
     names_json = json.dumps([name for name, _, _ in analyzed_benchmarks])
 
-    # Get Plotly div + Plotly.js inline (no outer <html>/<body> tags).
+    # Use CDN so Plotly.js (~3.5MB) is browser-cached rather than re-parsed
+    # on every load.  Requires an internet connection to view the report.
     plotly_html = fig.to_html(
-        include_plotlyjs=True,
+        include_plotlyjs="cdn",
         full_html=False,
         div_id="regression-chart",
     )
@@ -315,14 +323,25 @@ function getPageSlice(bmData, page) {{
   return bmData.data.slice(start, end);
 }}
 
+function makeHover(name, unit, d) {{
+  return '<b>' + name + '</b><br>' +
+    'Version: ' + d.v + '<br>' +
+    'Date: ' + d.d.substring(0, 10) + '<br>' +
+    'Mean: ' + d.m + ' ' + unit + '<br>' +
+    'Min: ' + d.n + ' ' + unit + '<br>' +
+    'Max: ' + d.x + ' ' + unit + '<br>' +
+    'Std Dev: ' + d.s + ' ' + unit;
+}}
+
 function updateChart() {{
   const chartDiv = document.getElementById('regression-chart');
   const xs = [], ys = [], texts = [];
   BENCHMARK_NAMES.forEach(name => {{
-    const slice = getPageSlice(BENCHMARK_DATA[name], currentPage);
-    xs.push(slice.map(d => d.date));
-    ys.push(slice.map(d => d.mean_scaled));
-    texts.push(slice.map(d => d.hover));
+    const bm = BENCHMARK_DATA[name];
+    const slice = getPageSlice(bm, currentPage);
+    xs.push(slice.map(d => d.d));
+    ys.push(slice.map(d => d.m));
+    texts.push(slice.map(d => makeHover(name, bm.unit_label, d)));
   }});
   Plotly.restyle(chartDiv, {{x: xs, y: ys, hovertext: texts}});
   // Reset all subplot axis ranges so they re-fit the new data window.
@@ -345,8 +364,8 @@ function updateControls() {{
     for (const name of BENCHMARK_NAMES) {{
       const slice = getPageSlice(BENCHMARK_DATA[name], currentPage);
       if (slice.length > 0) {{
-        const start = slice[0].date.substring(0, 10);
-        const end = slice[slice.length - 1].date.substring(0, 10);
+        const start = slice[0].d.substring(0, 10);
+        const end = slice[slice.length - 1].d.substring(0, 10);
         label = start + ' – ' + end + ' (page ' + (currentPage + 1) + ' of ' + (MAX_PAGE + 1) + ')';
         break;
       }}
