@@ -6,6 +6,7 @@ using statistical testing (t-test) and visualizes trends over time.
 """
 
 import argparse
+import json
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -145,24 +146,61 @@ def determine_time_unit(values: list[float]) -> tuple[str, float, str]:
         return ("seconds", 1_000_000_000, "s")
 
 
-def create_regression_chart(analyzed_benchmarks: list[tuple[str, float, list[dict]]], output_path: Path) -> None:
-    """Create an interactive HTML chart showing benchmark trends with tooltips.
+def create_regression_chart(
+    analyzed_benchmarks: list[tuple[str, float, list[dict]]],
+    output_path: Path,
+    page_size: int = 100,
+) -> None:
+    """Create an interactive HTML chart showing benchmark trends with pagination.
+
+    Renders the most recent `page_size` data points per benchmark by default.
+    Older data is embedded as JSON and loaded via JavaScript pagination controls.
 
     Args:
         analyzed_benchmarks: List of (benchmark_name, p_value, results) tuples
         output_path: Path to save the HTML chart
+        page_size: Number of data points to show per page (default: 100)
     """
     n_benchmarks = len(analyzed_benchmarks)
     if n_benchmarks == 0:
         print("No benchmarks to plot")
         return
 
-    print(f"\nCreating interactive chart with {n_benchmarks} subplots...")
+    print(f"\nCreating interactive chart with {n_benchmarks} subplots (page size: {page_size})...")
 
-    # Create subplots with minimal spacing
-    # Maximum vertical spacing is 1 / (rows - 1), but we want much less
+    # Serialize all data for JavaScript pagination — keyed by benchmark name.
+    # Only the fields needed for rendering are included (not full result dicts).
+    all_benchmark_data: dict[str, dict] = {}
+    for benchmark_name, _pvalue, results in analyzed_benchmarks:
+        means = [r["summary"]["mean"] for r in results]
+        _unit_name, divisor, unit_label = determine_time_unit(means)
+        data_points = []
+        for r in results:
+            ts = datetime.fromtimestamp(r["dut"]["timestamp"])
+            hover = (
+                f"<b>{benchmark_name}</b><br>"
+                f"Version: {r['dut']['version']}<br>"
+                f"Timestamp: {ts.strftime('%Y-%m-%d %H:%M:%S')}<br>"
+                f"Mean: {r['summary']['mean'] / divisor:.2f} {unit_label}<br>"
+                f"Min: {r['summary']['min'] / divisor:.2f} {unit_label}<br>"
+                f"Max: {r['summary']['max'] / divisor:.2f} {unit_label}<br>"
+                f"Std Dev: {r['summary']['standard_deviation'] / divisor:.2f} {unit_label}"
+            )
+            data_points.append(
+                {
+                    "date": ts.isoformat(),
+                    "mean_scaled": r["summary"]["mean"] / divisor,
+                    "hover": hover,
+                }
+            )
+        all_benchmark_data[benchmark_name] = {
+            "unit_label": unit_label,
+            "total_points": len(results),
+            "data": data_points,
+        }
+
+    # Build the initial Plotly figure showing page 0 (most recent page_size points).
     max_allowed_spacing = 1.0 / (n_benchmarks - 1) if n_benchmarks > 1 else 0.1
-    # Use minimal spacing - just enough to see separation
     vertical_spacing = min(0.005, max_allowed_spacing * 0.3)
 
     fig = make_subplots(
@@ -174,43 +212,19 @@ def create_regression_chart(analyzed_benchmarks: list[tuple[str, float, list[dic
 
     for idx, (benchmark_name, pvalue, results) in enumerate(analyzed_benchmarks):
         row = idx + 1
+        bm_data = all_benchmark_data[benchmark_name]
+        unit_label = bm_data["unit_label"]
 
-        # Extract data for plotting
-        timestamps = [r["dut"]["timestamp"] for r in results]
-        means = [r["summary"]["mean"] for r in results]
+        # Page 0: most recent page_size data points
+        initial_data = bm_data["data"][-page_size:]
 
-        # Determine best unit for this benchmark
-        unit_name, divisor, unit_label = determine_time_unit(means)
-
-        # Convert values to appropriate unit
-        means_scaled = [m / divisor for m in means]
-
-        # Convert timestamps to datetime for better x-axis labels
-        dates = [datetime.fromtimestamp(ts) for ts in timestamps]
-
-        # Format hover text with detailed information
-        hover_texts = []
-        for r in results:
-            ts = datetime.fromtimestamp(r["dut"]["timestamp"])
-            hover_text = (
-                f"<b>{benchmark_name}</b><br>"
-                f"Version: {r['dut']['version']}<br>"
-                f"Timestamp: {ts.strftime('%Y-%m-%d %H:%M:%S')}<br>"
-                f"Mean: {r['summary']['mean'] / divisor:.2f} {unit_label}<br>"
-                f"Min: {r['summary']['min'] / divisor:.2f} {unit_label}<br>"
-                f"Max: {r['summary']['max'] / divisor:.2f} {unit_label}<br>"
-                f"Std Dev: {r['summary']['standard_deviation'] / divisor:.2f} {unit_label}"
-            )
-            hover_texts.append(hover_text)
-
-        # Add trace for the benchmark data
         fig.add_trace(
             go.Scatter(
-                x=dates,
-                y=means_scaled,
+                x=[d["date"] for d in initial_data],
+                y=[d["mean_scaled"] for d in initial_data],
                 mode="lines+markers",
                 name=benchmark_name,
-                hovertext=hover_texts,
+                hovertext=[d["hover"] for d in initial_data],
                 hoverinfo="text",
                 marker={"size": 6},
                 line={"width": 2},
@@ -220,39 +234,32 @@ def create_regression_chart(analyzed_benchmarks: list[tuple[str, float, list[dic
             col=1,
         )
 
-        # Add vertical line separating recent results
-        if len(results) >= 4:
-            split_date = dates[-4]
-            # Add as a shape - need to specify both xref and yref for correct subplot
-            # xref format: "x" for first plot, "x2" for second, etc.
-            # yref format: "y domain" for first plot, "y2 domain" for second, etc.
-            xref = "x" if idx == 0 else f"x{idx + 1}"
-            yref = "y domain" if idx == 0 else f"y{idx + 1} domain"
-            fig.add_shape(
-                type="line",
-                x0=split_date,
-                x1=split_date,
-                y0=0,
-                y1=1,
-                xref=xref,
-                yref=yref,
-                line={"color": "red", "width": 1, "dash": "dash"},
-                opacity=0.5,
-            )
+        # Add split line between "recent" and "older" results.
+        # Only show it if the split point falls within the initial visible range.
+        if len(results) >= 4 and initial_data:
+            split_date = datetime.fromtimestamp(results[-4]["dut"]["timestamp"]).isoformat()
+            if split_date >= initial_data[0]["date"]:
+                xref = "x" if idx == 0 else f"x{idx + 1}"
+                yref = "y domain" if idx == 0 else f"y{idx + 1} domain"
+                fig.add_shape(
+                    type="line",
+                    x0=split_date,
+                    x1=split_date,
+                    y0=0,
+                    y1=1,
+                    xref=xref,
+                    yref=yref,
+                    line={"color": "red", "width": 1, "dash": "dash"},
+                    opacity=0.5,
+                )
 
-        # Color code subplot title based on p-value
-        # Use brighter colors for dark mode
         color = "#4ade80" if pvalue > 0.05 else "#fb923c" if pvalue > 0.01 else "#f87171"
         if fig.layout.annotations:  # type: ignore[attr-defined]
             fig.layout.annotations[idx].update(font={"color": color, "size": 10})  # type: ignore[attr-defined,index]
 
-        # Update y-axis label with appropriate unit
         fig.update_yaxes(title_text=f"Time ({unit_label})", row=row, col=1, title_font={"size": 10})
 
-    # Update x-axis for bottom plot
     fig.update_xaxes(title_text="Date", row=n_benchmarks, col=1, title_font={"size": 10})
-
-    # Update layout with dark mode theme
     fig.update_layout(
         title={
             "text": "Benchmark Regression Analysis<br><sub>(Sorted by p-value: Low→High)</sub>",
@@ -261,13 +268,119 @@ def create_regression_chart(analyzed_benchmarks: list[tuple[str, float, list[dic
         height=max(n_benchmarks * 300, 600),
         hovermode="closest",
         template="plotly_dark",
-        paper_bgcolor="#0f172a",  # Slate-900
-        plot_bgcolor="#1e293b",  # Slate-800
+        paper_bgcolor="#0f172a",
+        plot_bgcolor="#1e293b",
     )
 
-    # Save as HTML
+    # Max page index (0-based).  Each benchmark may have a different depth;
+    # use the deepest one so the "Older" button is available as long as any
+    # benchmark still has unseen data.
+    max_page = max((bm["total_points"] + page_size - 1) // page_size - 1 for bm in all_benchmark_data.values())
+
+    # Embed all data as JSON; the JS pagination reads from this.
+    data_json = json.dumps(all_benchmark_data)
+    names_json = json.dumps([name for name, _, _ in analyzed_benchmarks])
+
+    # Get Plotly div + Plotly.js inline (no outer <html>/<body> tags).
+    plotly_html = fig.to_html(
+        include_plotlyjs=True,
+        full_html=False,
+        div_id="regression-chart",
+    )
+
+    css = (
+        "body{background:#0f172a;color:#e2e8f0;font-family:sans-serif;margin:0;padding:0}"
+        "#pagination-controls{display:flex;align-items:center;gap:16px;padding:12px 20px;"
+        "background:#1e293b;border-bottom:1px solid #334155;position:sticky;top:0;z-index:1000}"
+        "button{background:#334155;color:#e2e8f0;border:1px solid #475569;padding:8px 16px;"
+        "border-radius:6px;cursor:pointer;font-size:14px}"
+        "button:hover:not(:disabled){background:#475569}"
+        "button:disabled{opacity:.4;cursor:not-allowed}"
+        "#page-info{font-size:14px;color:#94a3b8}"
+    )
+
+    # JavaScript — note: literal JS braces must be doubled in the f-string.
+    js = f"""
+const BENCHMARK_DATA = {data_json};
+const PAGE_SIZE = {page_size};
+const MAX_PAGE = {max_page};
+const BENCHMARK_NAMES = {names_json};
+const N_BENCHMARKS = {n_benchmarks};
+let currentPage = 0;
+
+function getPageSlice(bmData, page) {{
+  const total = bmData.data.length;
+  const end = total - page * PAGE_SIZE;
+  const start = Math.max(0, end - PAGE_SIZE);
+  return bmData.data.slice(start, end);
+}}
+
+function updateChart() {{
+  const chartDiv = document.getElementById('regression-chart');
+  const xs = [], ys = [], texts = [];
+  BENCHMARK_NAMES.forEach(name => {{
+    const slice = getPageSlice(BENCHMARK_DATA[name], currentPage);
+    xs.push(slice.map(d => d.date));
+    ys.push(slice.map(d => d.mean_scaled));
+    texts.push(slice.map(d => d.hover));
+  }});
+  Plotly.restyle(chartDiv, {{x: xs, y: ys, hovertext: texts}});
+  // Reset all subplot axis ranges so they re-fit the new data window.
+  const layoutUpdate = {{}};
+  for (let i = 0; i < N_BENCHMARKS; i++) {{
+    const xi = i === 0 ? 'xaxis' : 'xaxis' + (i + 1);
+    const yi = i === 0 ? 'yaxis' : 'yaxis' + (i + 1);
+    layoutUpdate[xi + '.autorange'] = true;
+    layoutUpdate[yi + '.autorange'] = true;
+  }}
+  Plotly.relayout(chartDiv, layoutUpdate);
+  updateControls();
+}}
+
+function updateControls() {{
+  document.getElementById('prev-btn').disabled = currentPage >= MAX_PAGE;
+  document.getElementById('next-btn').disabled = currentPage <= 0;
+  let label = 'Showing most recent ' + PAGE_SIZE + ' data points';
+  if (currentPage > 0) {{
+    for (const name of BENCHMARK_NAMES) {{
+      const slice = getPageSlice(BENCHMARK_DATA[name], currentPage);
+      if (slice.length > 0) {{
+        const start = slice[0].date.substring(0, 10);
+        const end = slice[slice.length - 1].date.substring(0, 10);
+        label = start + ' – ' + end + ' (page ' + (currentPage + 1) + ' of ' + (MAX_PAGE + 1) + ')';
+        break;
+      }}
+    }}
+  }}
+  document.getElementById('page-info').textContent = label;
+}}
+
+function changePage(delta) {{
+  const p = currentPage + delta;
+  if (p < 0 || p > MAX_PAGE) return;
+  currentPage = p;
+  updateChart();
+}}
+
+updateControls();
+"""
+
+    html = (
+        "<!DOCTYPE html>\n<html>\n<head>\n"
+        '  <meta charset="utf-8">\n'
+        "  <title>Benchmark Regression Analysis</title>\n"
+        f"  <style>{css}</style>\n"
+        "</head>\n<body>\n"
+        '  <div id="pagination-controls">\n'
+        '    <button id="prev-btn" onclick="changePage(1)">← Older</button>\n'
+        '    <span id="page-info">Loading…</span>\n'
+        '    <button id="next-btn" onclick="changePage(-1)" disabled>Newer →</button>\n'
+        "  </div>\n" + plotly_html + f"\n  <script>{js}</script>\n"
+        "</body>\n</html>\n"
+    )
+
     print(f"Saving interactive chart to {output_path}...")
-    fig.write_html(output_path)
+    output_path.write_text(html, encoding="utf-8")
     print("✓ Interactive HTML chart saved successfully")
 
 
@@ -347,6 +460,12 @@ Examples:
         default=0.05,
         help="P-value threshold for flagging regressions (default: 0.05)",
     )
+    parser.add_argument(
+        "--page-size",
+        type=int,
+        default=100,
+        help="Number of data points to display per page in the chart (default: 100)",
+    )
 
     args = parser.parse_args()
 
@@ -372,7 +491,7 @@ Examples:
         print_summary(analyzed_benchmarks, args.threshold)
 
         # Create chart
-        create_regression_chart(analyzed_benchmarks, args.output)
+        create_regression_chart(analyzed_benchmarks, args.output, args.page_size)
 
         print(f"\n✅ Report generated successfully: {args.output}")
 
