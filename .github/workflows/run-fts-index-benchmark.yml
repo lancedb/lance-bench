@@ -81,7 +81,7 @@ jobs:
       - name: Update Lance git revision in Cargo.toml
         run: |
           cd benchmarks/train_fts_index
-          sed -i 's|rev = "[a-f0-9]*"|rev = "${{ inputs.git_sha }}"|g' Cargo.toml
+          sed -i '/^lance\(-index\)\? = /s|rev = "[a-f0-9]*"|rev = "${{ inputs.git_sha }}"|g' Cargo.toml
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2

@@ -27,6 +27,10 @@ tracing = "0.1"
 tracing-chrome = "0.7"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Match Lance's workspace patch; Cargo does not inherit patches from git dependencies.
+[patch.crates-io]
+object_store = { git = "https://github.com/apache/arrow-rs-object-store.git", rev = "c10758c207c0103355f940f0c736fb8ecb157b04" }
+
 [profile.release]
 opt-level = 3
 lto = true
