@@ -88,7 +88,8 @@ jobs:
           python -m venv venv
           source venv/bin/activate
           python -m pip install --upgrade pip
-          python -m pip install maturin pytest pytest-benchmark requests duckdb datasets
+          # pytest-benchmark uses _nodeid, which pytest 9.2 removed.
+          python -m pip install maturin 'pytest<9.2' pytest-benchmark requests duckdb datasets
 
       - name: Build Lance Python package
         run: |
